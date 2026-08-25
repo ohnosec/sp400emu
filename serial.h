@@ -2,6 +2,7 @@
 #define SP400_SERIAL_H_
 
 #include "board.h"
+#include <atomic>
 #include <thread>
 
 class Serial {
@@ -14,9 +15,14 @@ private:
   void setRts(bool b);
   Board &board;
   std::string dev;
-  bool running;
-  std::thread t;
+#ifdef _WIN32
+  void *fd;
+  bool rtsEnabled;
+#else
   int fd;
+#endif
+  std::atomic<bool> running;
+  std::thread t;
 };
 
 #endif

@@ -1,7 +1,11 @@
 #ifndef _SP400_PLOTTER_H
 #define _SP400_PLOTTER_H
 #include "board.h"
+#ifdef _WIN32
+#include <SDL.h>
+#else
 #include <SDL2/SDL.h>
+#endif
 
 struct Point {
   int32_t x, y;

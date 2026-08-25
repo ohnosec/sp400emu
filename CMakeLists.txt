@@ -1,0 +1,88 @@
+cmake_minimum_required(VERSION 3.20)
+
+project(sp400emu LANGUAGES C CXX)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+set(M68_OPTABLE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(M68_OPTABLE "${M68_OPTABLE_DIR}/m68_optab_hc05.h")
+add_custom_command(
+  OUTPUT "${M68_OPTABLE}"
+  COMMAND "${CMAKE_COMMAND}" -E make_directory "${M68_OPTABLE_DIR}"
+  COMMAND "${CMAKE_COMMAND}"
+          "-DPYTHON_EXECUTABLE=${Python3_EXECUTABLE}"
+          "-DGENERATOR=${CMAKE_CURRENT_SOURCE_DIR}/m68emu/optable/makeoptab.py"
+          "-DOPCODE_CSV=${CMAKE_CURRENT_SOURCE_DIR}/m68emu/optable/opcodes_m68hc05.csv"
+          "-DOUTPUT_FILE=${M68_OPTABLE}"
+          -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateM68Optable.cmake"
+  DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/m68emu/optable/makeoptab.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/m68emu/optable/opcodes_m68hc05.csv"
+  VERBATIM
+)
+
+add_executable(sp400
+  board.cpp
+  m68sys.cpp
+  main.cpp
+  plotter.cpp
+  serial.cpp
+  stepper.c
+  m68emu/m68emu.c
+  m68emu/m68_ops.c
+  m68emu/m68tmr.c
+  "${M68_OPTABLE}"
+)
+
+target_compile_features(sp400 PRIVATE c_std_11 cxx_std_17)
+target_include_directories(sp400 PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${M68_OPTABLE_DIR}"
+)
+
+if(MSVC)
+  target_compile_options(sp400 PRIVATE /W4)
+endif()
+
+if(WIN32)
+  set(SDL2_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2-2.32.2"
+      CACHE PATH "Path to the SDL2 2.32.2 Visual C development package")
+  set(SDL2_DLL "${SDL2_ROOT}/lib/x64/SDL2.dll")
+  set(SP400_ROM "${CMAKE_CURRENT_SOURCE_DIR}/sp400_6805.bin")
+
+  foreach(required_file
+      "${SDL2_ROOT}/include/SDL.h"
+      "${SDL2_ROOT}/lib/x64/SDL2.lib"
+      "${SDL2_DLL}"
+      "${SP400_ROM}")
+    if(NOT EXISTS "${required_file}")
+      message(FATAL_ERROR "Required file not found: ${required_file}")
+    endif()
+  endforeach()
+
+  add_library(SDL2::SDL2 SHARED IMPORTED GLOBAL)
+  set_target_properties(SDL2::SDL2 PROPERTIES
+    IMPORTED_IMPLIB "${SDL2_ROOT}/lib/x64/SDL2.lib"
+    IMPORTED_LOCATION "${SDL2_DLL}"
+    INTERFACE_INCLUDE_DIRECTORIES "${SDL2_ROOT}/include"
+  )
+
+  target_compile_definitions(sp400 PRIVATE
+    SDL_MAIN_HANDLED
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+  )
+  target_link_libraries(sp400 PRIVATE SDL2::SDL2)
+
+  add_custom_command(TARGET sp400 POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${SDL2_DLL}" "$<TARGET_FILE_DIR:sp400>/SDL2.dll"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${SP400_ROM}" "$<TARGET_FILE_DIR:sp400>/sp400_6805.bin"
+    VERBATIM
+  )
+else()
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
+  target_link_libraries(sp400 PRIVATE PkgConfig::SDL2)
+endif()

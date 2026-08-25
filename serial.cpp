@@ -1,9 +1,13 @@
 #include "serial.h"
 #include <cstring> // for memset
-#include <fcntl.h>
 #include <iostream>
-#include <linux/serial.h>
 #include <sstream>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <linux/serial.h>
 #include <stdio.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -12,15 +16,124 @@
 #include <unistd.h>
 
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
+#endif
 
 Serial::Serial(Board &board_, const std::string &dev_)
-    : board(board_), dev(dev_), running(true), t([this] { run(); }) {}
+    : board(board_), dev(dev_)
+#ifdef _WIN32
+      , fd(INVALID_HANDLE_VALUE), rtsEnabled(false)
+#else
+      , fd(-1)
+#endif
+      , running(true), t([this] { run(); }) {}
 
 Serial::~Serial() {
   running = false;
   t.join();
 }
 
+#ifdef _WIN32
+namespace {
+std::string windowsDevicePath(const std::string &device) {
+  static const std::string prefix = R"(\\.\)";
+  if (device.compare(0, prefix.size(), prefix) == 0) {
+    return device;
+  }
+  return prefix + device;
+}
+
+void reportWindowsError(const std::string &operation, DWORD error) {
+  std::cerr << operation << " failed with Windows error " << error << std::endl;
+}
+} // namespace
+
+void Serial::setRts(bool enabled) {
+  HANDLE handle = static_cast<HANDLE>(fd);
+  if (handle == INVALID_HANDLE_VALUE || enabled == rtsEnabled) {
+    return;
+  }
+
+  if (!EscapeCommFunction(handle, enabled ? SETRTS : CLRRTS)) {
+    reportWindowsError("Setting RTS", GetLastError());
+    return;
+  }
+  rtsEnabled = enabled;
+}
+
+void Serial::run() {
+  const std::string device = windowsDevicePath(dev);
+  HANDLE handle = CreateFileA(device.c_str(), GENERIC_READ | GENERIC_WRITE, 0,
+                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+                              nullptr);
+  if (handle == INVALID_HANDLE_VALUE) {
+    reportWindowsError("Opening " + device, GetLastError());
+    return;
+  }
+  fd = handle;
+
+  DCB state = {};
+  state.DCBlength = sizeof(state);
+  if (!GetCommState(handle, &state)) {
+    reportWindowsError("Reading serial settings", GetLastError());
+    CloseHandle(handle);
+    fd = INVALID_HANDLE_VALUE;
+    return;
+  }
+
+  state.BaudRate = CBR_4800;
+  state.ByteSize = 8;
+  state.Parity = NOPARITY;
+  state.StopBits = ONESTOPBIT;
+  state.fBinary = TRUE;
+  state.fParity = FALSE;
+  state.fOutxCtsFlow = FALSE;
+  state.fOutxDsrFlow = FALSE;
+  state.fDtrControl = DTR_CONTROL_DISABLE;
+  state.fDsrSensitivity = FALSE;
+  state.fTXContinueOnXoff = TRUE;
+  state.fOutX = FALSE;
+  state.fInX = FALSE;
+  state.fErrorChar = FALSE;
+  state.fNull = FALSE;
+  state.fRtsControl = RTS_CONTROL_DISABLE;
+  state.fAbortOnError = FALSE;
+
+  if (!SetCommState(handle, &state)) {
+    reportWindowsError("Configuring serial port", GetLastError());
+    CloseHandle(handle);
+    fd = INVALID_HANDLE_VALUE;
+    return;
+  }
+
+  COMMTIMEOUTS timeouts = {};
+  timeouts.ReadIntervalTimeout = MAXDWORD;
+  timeouts.ReadTotalTimeoutConstant = 50;
+  if (!SetCommTimeouts(handle, &timeouts)) {
+    reportWindowsError("Configuring serial timeouts", GetLastError());
+    CloseHandle(handle);
+    fd = INVALID_HANDLE_VALUE;
+    return;
+  }
+
+  PurgeComm(handle, PURGE_RXCLEAR);
+  char buffer[255];
+  while (running.load()) {
+    DWORD bytesRead = 0;
+    if (!ReadFile(handle, buffer, sizeof(buffer), &bytesRead, nullptr)) {
+      reportWindowsError("Reading serial port", GetLastError());
+      break;
+    }
+
+    setRts(board.isBusy());
+    if (bytesRead > 0) {
+      board.pushData(reinterpret_cast<const uint8_t *>(buffer), bytesRead);
+    }
+  }
+
+  CloseHandle(handle);
+  fd = INVALID_HANDLE_VALUE;
+}
+#else
 void Serial::setRts(bool b) {
   // std::cout<<"setting RTS to "<<b<<std::endl;
   int status;
@@ -90,11 +203,11 @@ void Serial::run() {
 
   // setRts(false);
 
-  while (running) { /* loop for input */
+  while (running.load()) { /* loop for input */
     // std::cout<<"starting read"<<std::endl;
     int res = read(fd, buf, 255);
     setRts(board.isBusy());
-    if (res) {
+    if (res > 0) {
       // std::cout<<"received"<<res<<" bytes"<<std::endl;
       board.pushData(reinterpret_cast<const uint8_t *>(buf), res);
     } else {
@@ -102,4 +215,6 @@ void Serial::run() {
     }
   }
   tcsetattr(fd, TCSANOW, &oldtio);
+  close(fd);
 }
+#endif

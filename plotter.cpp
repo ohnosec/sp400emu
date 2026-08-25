@@ -1,5 +1,6 @@
 
 #include "plotter.h"
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <stdbool.h>

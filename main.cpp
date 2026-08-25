@@ -9,6 +9,10 @@ int main(int argc, char **argv) {
     return 0;
   }
 
+#ifdef _WIN32
+  SDL_SetMainReady();
+#endif
+
   Board board("sp400_6805.bin");
 
   Plotter plotter(board, 640, 480);
