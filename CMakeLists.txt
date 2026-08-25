@@ -23,6 +23,7 @@ add_custom_command(
 
 add_executable(sp400
   board.cpp
+  file_input.cpp
   m68sys.cpp
   main.cpp
   plotter.cpp

@@ -14,6 +14,21 @@
       "environment": [],
       "console": "integratedTerminal",
       "preLaunchTask": "Windows: Build Debug"
+    },
+    {
+      "name": "SP400 emulator from file (MSVC Debug)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}\\build\\windows\\Debug\\sp400.exe",
+      "args": [
+        "--file",
+        "${input:commandFile}"
+      ],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "Windows: Build Debug"
     }
   ],
   "inputs": [
@@ -22,6 +37,12 @@
       "type": "promptString",
       "description": "Windows serial port connected to the SP400 input",
       "default": "COM3"
+    },
+    {
+      "id": "commandFile",
+      "type": "promptString",
+      "description": "Path to an SP400 command file",
+      "default": "commands.txt"
     }
   ]
 }

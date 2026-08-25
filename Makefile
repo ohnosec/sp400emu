@@ -1,6 +1,6 @@
 BUILD_DIR=./build
 CXXFLAGS=-Wall -I.
-CPP_SOURCES= serial.cpp  m68sys.cpp plotter.cpp main.cpp board.cpp
+CPP_SOURCES= serial.cpp file_input.cpp m68sys.cpp plotter.cpp main.cpp board.cpp
 C_SOURCES= stepper.c m68emu/m68emu.c m68emu/m68_ops.c m68emu/m68tmr.c
 
 

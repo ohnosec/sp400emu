@@ -2,13 +2,14 @@
 #define SP400_SERIAL_H_
 
 #include "board.h"
+#include "input_source.h"
 #include <atomic>
 #include <thread>
 
-class Serial {
+class Serial : public InputSource {
 public:
   Serial(Board &board, const std::string &dev);
-  ~Serial();
+  ~Serial() override;
 
 private:
   void run();
