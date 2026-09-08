@@ -35,6 +35,28 @@
       ],
       "group": "build",
       "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Linux: Build",
+      "type": "process",
+      "command": "make",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Linux: Clean",
+      "type": "process",
+      "command": "make",
+      "args": [
+        "clean"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
     }
   ]
 }

@@ -1,5 +1,6 @@
 #include "front_panel.h"
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -40,6 +41,11 @@ int main() {
     require(!panel.update(2149), "retriggered color pulse ended too early");
     require(panel.update(2150), "retriggered color pulse did not end");
     require(panel.lineFeedPressed(), "color pulse released line feed");
+
+    const uint32_t nearRollover = std::numeric_limits<uint32_t>::max() - 50;
+    panel.pulseColorSelect(nearRollover);
+    require(!panel.update(48), "color pulse ended early across tick rollover");
+    require(panel.update(49), "color pulse did not end across tick rollover");
 
     panel.pulseColorSelect(3000);
     panel.releaseAll();

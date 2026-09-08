@@ -1,55 +1,117 @@
-# SP400 emulator
+# Sega SP-400 plotter emulator
 
-This project emulates the Sega SP-400 plotter. The original Makefile targets
-Linux; the CMake and VS Code files add a 64-bit Windows build using Microsoft
-Visual C++ and SDL2.
+This project emulates the Sega SP-400 plotter on Linux and Windows. It accepts
+native SP-400 input from a serial port, a file, or a local TCP connection.
 
-## Windows prerequisites
+## Build prerequisites
 
-- Visual Studio 2022 or Build Tools 2022 with **Desktop development with C++**.
-- VS Code with the recommended Microsoft C/C++ extension.
+### Common
 
-## Build in VS Code
+- Git, including submodule support
+- Python 3, used to generate build-time tables and embedded cursor assets
 
-1. Open this folder in VS Code.
-2. Select **Terminal > Run Build Task**.
-3. Choose **Windows: Build Debug** (it is the default build task).
+Initialize the `m68emu` submodule after cloning:
 
-The first build downloads SDL's official 2.32.2 Visual C development archive.
-The setup script verifies its SHA-256 hash and uses the archive's headers, x64
-`SDL2.lib`, and x64 `SDL2.dll`.
+```sh
+git submodule update --init
+```
 
-The output is written to `build/windows/Debug/`. The build copies both
-`SDL2.dll` and `sp400_6805.bin` beside `sp400.exe`.
+### Linux
 
-To build from a PowerShell terminal instead:
+Install a C++ toolchain, GNU Make, Python 3, and the SDL2 development package.
+On Ubuntu:
+
+```sh
+sudo apt install build-essential python3 libsdl2-dev
+```
+
+Install `gdb` as well if you want to debug from VS Code.
+
+### Windows
+
+- Visual Studio 2022 or Build Tools 2022 with **Desktop development with C++**
+- VS Code with the recommended Microsoft C/C++ extension, if desired
+- Python 3. Install it from python.org and enable. **Add python.exe to PATH**
+during installation.
+
+The Windows setup script downloads SDL's official 2.32.2 Visual C development
+archive on the first build. It verifies the archive's SHA-256 hash before using
+its headers, x64 import library, and DLL.
+
+## Build
+
+| Platform | Build command | Executable |
+| --- | --- | --- |
+| Linux | `make` | `build/linux/sp400` |
+| Windows Debug | `scripts\build-windows.ps1 -Configuration Debug` | `build\windows\Debug\sp400.exe` |
+| Windows Release | `scripts\build-windows.ps1 -Configuration Release` | `build\windows\Release\sp400.exe` |
+
+### Linux
+
+From the project root:
+
+```sh
+make
+```
+
+The executable, objects, and generated headers are written under
+`build/linux/`. Run `make clean` to remove only the Linux build output.
+
+### Windows
+
+From PowerShell:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1 -Configuration Debug
 ```
 
-## Run and debug
+The build places the executable in `build/windows/Debug/` and copies
+`SDL2.dll` and `sp400_6805.bin` beside it.
 
-Press **F5** and select one of these launch configurations:
+## VS Code
 
-- **SP400 emulator (MSVC Debug)** prompts for the Windows COM port connected to
-  the plotter input, for example `COM3`.
-- **SP400 emulator from file (MSVC Debug)** prompts for a command file path.
-- **SP400 emulator from TCP (MSVC Debug)** prompts for a localhost TCP port.
+The checked-in VS Code configurations support both platforms:
 
-From a terminal, run:
+| Platform | Build task | Debugger | Launch configurations |
+| --- | --- | --- | --- |
+| Linux | **Linux: Build** | GDB | Serial, file, and TCP |
+| Windows | **Windows: Build Debug** | MSVC | Serial, file, and TCP |
+
+Use **Terminal > Run Build Task** to select a build. Press **F5** and select a
+launch configuration under **Run and Debug**. Serial launches prompt for
+`/dev/ttyUSB0` on Linux by default and `COM3` on Windows ; file and TCP launches
+prompt for their corresponding input.
+
+## Run
+
+Run these commands from the project root so the emulator can find
+`sp400_6805.bin`.
+
+### Serial input
+
+```sh
+# Linux
+./build/linux/sp400 /dev/ttyUSB0
+```
 
 ```powershell
+# Windows
 .\build\windows\Debug\sp400.exe COM3
 ```
 
-The Windows serial implementation opens the port at 4800 baud, 8 data bits, no
-parity, and one stop bit (4800 8N1). It also drives RTS from the emulator's busy
-state. Port names above `COM9` are supported.
+The emulator configures the serial port for 4800 baud, 8 data bits, no parity,
+and one stop bit (4800 8N1). RTS reflects the emulator's ready/busy state.
+Windows port names above `COM9` are supported.
 
-To play a command file instead of using a serial port:
+### File input
+
+```sh
+# Linux
+./build/linux/sp400 --file commands.txt
+```
 
 ```powershell
+# Windows
 .\build\windows\Debug\sp400.exe --file ".\commands.txt"
 ```
 
@@ -59,31 +121,33 @@ the same ready/busy signal as serial input. Reaching the end of the file stops
 input but leaves the SDL window open so the completed plot remains visible.
 Quote paths that contain spaces.
 
-## Receive native commands over TCP
+### TCP input
 
-To start the emulator as a TCP server:
+```sh
+# Linux
+./build/linux/sp400 --tcp 4040
+```
 
 ```powershell
+# Windows
 .\build\windows\Debug\sp400.exe --tcp 4040
 ```
 
 The listener binds only to `127.0.0.1`, accepts one client at a time, and treats
-all input as an opaque stream of native SP-400 bytes. It does not treat individual
-TCP writes or packets as command boundaries. Received bytes are released to the
-emulated board in order, paced like a 4800-baud 8N1 serial link, and gated by the
-emulated ready signal. A client may connect and send immediately after the listener
-appears; the emulator buffers the stream until the ROM has completed startup and
-entered its input parser.
+all input as an opaque stream of native SP-400 bytes. TCP writes and packets do
+not define command boundaries. Received bytes are delivered in order, paced
+like a 4800-baud 8N1 serial link, and gated by the emulated ready signal.
 
-Disconnecting a client leaves the SDL window open and returns the listener to
-its accept loop. TCP mode does not send the emulated BUSY state back, so it
-verifies translation and emulated plotting, not the UART/BUSY transport
-behavior.
+A client may send immediately after the listener appears; the emulator buffers
+the stream until the ROM has completed startup and entered its input parser.
+Disconnecting leaves the SDL window open and returns the listener to its accept
+loop. TCP mode does not send the emulated BUSY state back, so it verifies
+translation and plotting rather than UART/BUSY transport behavior.
 
 ## Manual controls
 
-- Hold **FEED**, or hold the `F` key
-- Click **COLOR**, or press the `C` key
+- Hold **FEED**, or hold the `F` key, for Line Feed.
+- Click **COLOR**, or press the `C` key, for Color Select.
 
 ## Paper navigation
 
@@ -99,16 +163,3 @@ drag the paper directly to move through it.
 Manual scrolling is ignored while the firmware reports that it is busy. When
 plotting resumes, the viewport automatically returns to the current print-head
 position.
-
-## Linux
-
-Install the SDL2 development package for your distribution, initialize the
-`m68emu` submodule, and use the existing Makefile:
-
-```sh
-git submodule update --init
-make
-./sp400 /dev/ttyUSB0
-./sp400 --file commands.txt
-./sp400 --tcp 4040
-```

@@ -313,7 +313,7 @@ void Plotter::updateLineFeed() {
 }
 
 void Plotter::pulseColorSelect() {
-  frontPanel.pulseColorSelect(SDL_GetTicks64());
+  frontPanel.pulseColorSelect(SDL_GetTicks());
   board.setButtons(frontPanel.buttons());
 }
 
@@ -478,7 +478,7 @@ void Plotter::run() {
     while (SDL_PollEvent(&e) != 0) {
       handleEvent(e, quit);
     }
-    if (frontPanel.update(SDL_GetTicks64())) {
+    if (frontPanel.update(SDL_GetTicks())) {
       board.setButtons(frontPanel.buttons());
     }
     auto states = board.getStates();

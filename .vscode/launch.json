@@ -44,6 +44,74 @@
       "environment": [],
       "console": "integratedTerminal",
       "preLaunchTask": "Windows: Build Debug"
+    },
+    {
+      "name": "SP400 emulator (GDB/Linux)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/linux/sp400",
+      "args": [
+        "${input:serialDevice}"
+      ],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable GDB pretty-printing",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "preLaunchTask": "Linux: Build"
+    },
+    {
+      "name": "SP400 emulator from file (GDB/Linux)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/linux/sp400",
+      "args": [
+        "--file",
+        "${input:commandFile}"
+      ],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable GDB pretty-printing",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "preLaunchTask": "Linux: Build"
+    },
+    {
+      "name": "SP400 emulator from TCP (GDB/Linux)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/linux/sp400",
+      "args": [
+        "--tcp",
+        "${input:tcpPort}"
+      ],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable GDB pretty-printing",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "preLaunchTask": "Linux: Build"
     }
   ],
   "inputs": [
@@ -52,6 +120,12 @@
       "type": "promptString",
       "description": "Windows serial port connected to the SP400 input",
       "default": "COM3"
+    },
+    {
+      "id": "serialDevice",
+      "type": "promptString",
+      "description": "Linux serial device connected to the SP400 input",
+      "default": "/dev/ttyUSB0"
     },
     {
       "id": "commandFile",
