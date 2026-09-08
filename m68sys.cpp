@@ -26,7 +26,10 @@ bool PlotterState::operator!=(const PlotterState &b) {
 }
 
 M68sys::M68sys(const char *rom)
-    : colorPhase(0), time(0), buttons(0b111), porta(0x80), portc(0x84) {
+    : M68_CTX{}, memspace{}, tmr{}, xstep{}, ystep{}, penDown(false),
+      colorPhase(0), time(0), buttons(0b111), busy(false),
+      inputInitialized(false), inputLatchFull(false), inputHandlerAddress(0),
+      porta(0x80), portc(0x84) {
   std::ifstream binaryFile(rom, std::ios::in | std::ios::binary);
   if (binaryFile.is_open()) {
     binaryFile.read(reinterpret_cast<char *>(memspace.data()), arraySize);
@@ -40,6 +43,9 @@ M68sys::M68sys(const char *rom)
   write_mem = &writefunc;
   opdecode = NULL;
   m68_init(this, M68_CPU_HD6805V1);
+  inputHandlerAddress =
+      (static_cast<uint16_t>(memspace[0x0FFC]) << 8) | memspace[0x0FFD];
+  inputHandlerAddress &= pc_and;
   trace = false;
   m68_reset(this);
   tmr_init(&tmr);
@@ -52,6 +58,11 @@ uint8_t M68sys::read(uint16_t addr) {
     return porta | (buttons << 2);
   }
 
+  if (addr == PORTD) {
+    inputLatchFull = false;
+    return memspace[addr];
+  }
+
   uint8_t v = memspace[addr];
   if (addr == PORTC) {
     return (v & ~((1 << 2) | (1 << 7))) | portc | (getReed() << 3);
@@ -61,7 +72,19 @@ uint8_t M68sys::read(uint16_t addr) {
   return v;
 }
 
-bool M68sys::getBusy() { return busy; }
+bool M68sys::isInputReady() const {
+  const bool interruptsMasked = (reg_ccr & M68_CCR_I) != 0;
+  const bool inputInterruptPending =
+      (pending_interrupts & (1 << M68_INT_IRQ)) != 0;
+  return inputInitialized && !inputLatchFull && !busy && !interruptsMasked &&
+         !inputInterruptPending;
+}
+
+void M68sys::recordInputInitialization() {
+  if (reg_pc == inputHandlerAddress) {
+    inputInitialized = true;
+  }
+}
 
 void M68sys::pushState() {
   static PlotterState prev(0, 0, false, 0, false);
@@ -118,11 +141,13 @@ bool M68sys::getReed() { return colorPhase == 0 && xstep.pos < METALTABPOS; }
 
 void M68sys::pushData(uint8_t d) {
   memspace[PORTD] = d;
+  inputLatchFull = true;
   m68_set_interrupt_line(this, M68_INT_IRQ);
 }
 
 uint64_t M68sys::step() {
   uint64_t cycles = m68_exec_cycle(this);
+  recordInputInitialization();
   time += cycles;
   // std::cout<<"time"<<time<<std::endl;
   if (tmr_exec(&tmr, cycles, false)) {
@@ -140,6 +165,7 @@ void M68sys::runToTime(uint64_t t) {
   while (time < t) {
     // globalt=time;
     uint64_t cycles = m68_exec_cycle(this);
+    recordInputInitialization();
     time += cycles;
     // std::cout<<"time"<<time<<std::endl;
     if (tmr_exec(&tmr, cycles, false)) {
@@ -162,6 +188,8 @@ void M68sys::getStates(std::vector<PlotterState> &states) {
 
 void M68sys::resetCpu() {
   std::cout << "reset cpu" << std::endl;
+  inputInitialized = false;
+  inputLatchFull = false;
   m68_init(this, M68_CPU_HD6805V1);
   tmr_init(&tmr);
 }

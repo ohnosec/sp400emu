@@ -1,8 +1,8 @@
 #ifndef SP400_FILE_INPUT_H_
 #define SP400_FILE_INPUT_H_
 
-#include "board.h"
 #include "input_source.h"
+#include "input_target.h"
 #include <atomic>
 #include <fstream>
 #include <string>
@@ -10,13 +10,13 @@
 
 class FileInput : public InputSource {
 public:
-  FileInput(Board &board, const std::string &path);
+  FileInput(InputTarget &target, const std::string &path);
   ~FileInput() override;
 
 private:
   void run();
 
-  Board &board;
+  InputTarget &target;
   std::string path;
   std::ifstream file;
   std::atomic<bool> running;

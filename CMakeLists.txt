@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 project(sp400emu LANGUAGES C CXX)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+find_package(Threads REQUIRED)
 
 set(M68_OPTABLE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(M68_OPTABLE "${M68_OPTABLE_DIR}/m68_optab_hc05.h")
@@ -29,6 +30,7 @@ add_executable(sp400
   plotter.cpp
   serial.cpp
   stepper.c
+  tcp_input.cpp
   m68emu/m68emu.c
   m68emu/m68_ops.c
   m68emu/m68tmr.c
@@ -40,6 +42,7 @@ target_include_directories(sp400 PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}"
   "${M68_OPTABLE_DIR}"
 )
+target_link_libraries(sp400 PRIVATE Threads::Threads)
 
 if(MSVC)
   target_compile_options(sp400 PRIVATE /W4)
@@ -73,7 +76,7 @@ if(WIN32)
     NOMINMAX
     WIN32_LEAN_AND_MEAN
   )
-  target_link_libraries(sp400 PRIVATE SDL2::SDL2)
+  target_link_libraries(sp400 PRIVATE SDL2::SDL2 ws2_32)
 
   add_custom_command(TARGET sp400 POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
@@ -86,4 +89,50 @@ else()
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
   target_link_libraries(sp400 PRIVATE PkgConfig::SDL2)
+endif()
+
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(m68sys_input_test
+    tests/m68sys_input_test.cpp
+    m68sys.cpp
+    stepper.c
+    m68emu/m68emu.c
+    m68emu/m68_ops.c
+    m68emu/m68tmr.c
+    "${M68_OPTABLE}"
+  )
+  target_compile_features(m68sys_input_test PRIVATE c_std_11 cxx_std_17)
+  target_include_directories(m68sys_input_test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${M68_OPTABLE_DIR}"
+  )
+  target_compile_definitions(m68sys_input_test PRIVATE
+    SP400_ROM_PATH="${CMAKE_CURRENT_SOURCE_DIR}/sp400_6805.bin"
+  )
+  if(MSVC)
+    target_compile_options(m68sys_input_test PRIVATE /W4)
+  endif()
+  add_test(NAME m68sys_input COMMAND m68sys_input_test)
+
+  add_executable(tcp_input_test
+    tests/tcp_input_test.cpp
+    tcp_input.cpp
+  )
+  target_compile_features(tcp_input_test PRIVATE cxx_std_17)
+  target_include_directories(tcp_input_test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  )
+  target_link_libraries(tcp_input_test PRIVATE Threads::Threads)
+  if(MSVC)
+    target_compile_options(tcp_input_test PRIVATE /W4)
+  endif()
+  if(WIN32)
+    target_compile_definitions(tcp_input_test PRIVATE
+      NOMINMAX
+      WIN32_LEAN_AND_MEAN
+    )
+    target_link_libraries(tcp_input_test PRIVATE ws2_32)
+  endif()
+  add_test(NAME tcp_input COMMAND tcp_input_test)
 endif()

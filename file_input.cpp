@@ -10,8 +10,9 @@ constexpr double SERIAL_BITS_PER_BYTE = 10.0;
 constexpr double SERIAL_BAUD_RATE = 4800.0;
 } // namespace
 
-FileInput::FileInput(Board &board_, const std::string &path_)
-    : board(board_), path(path_), file(path, std::ios::binary), running(false) {
+FileInput::FileInput(InputTarget &target_, const std::string &path_)
+    : target(target_), path(path_), file(path, std::ios::binary),
+      running(false) {
   if (!file.is_open()) {
     throw std::runtime_error("Cannot open input file: " + path);
   }
@@ -37,7 +38,7 @@ void FileInput::run() {
   while (running.load() && file.get(value)) {
     // Mirror the RTS state used by Serial so file playback cannot overrun the
     // emulated firmware's input handling.
-    while (running.load() && !board.isBusy()) {
+    while (running.load() && !target.isReady()) {
       std::this_thread::sleep_for(readyPollInterval);
     }
     if (!running.load()) {
@@ -46,7 +47,7 @@ void FileInput::run() {
 
     nextByteTime = std::max(nextByteTime, std::chrono::steady_clock::now());
     const auto byte = static_cast<uint8_t>(static_cast<unsigned char>(value));
-    board.pushData(&byte, 1);
+    target.pushData(&byte, 1);
 
     nextByteTime += std::chrono::duration_cast<std::chrono::steady_clock::duration>(
         frameDuration);

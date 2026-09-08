@@ -32,16 +32,16 @@ std::vector<PlotterState> Board::getStates() {
   return s;
 }
 
-bool Board::isBusy() {
+bool Board::isReady() {
   std::lock_guard<std::mutex> lock(mutex);
-  return data.empty() && !m68.getBusy();
+  return data.empty() && m68.isInputReady();
 }
 
 void Board::run() {
   auto start = std::chrono::high_resolution_clock::now();
-  bool pullData;
-  uint8_t head;
-  uint64_t t = 0;
+  bool pullData = false;
+  uint8_t head = 0;
+  uint64_t elapsedMs = 0;
   uint64_t ticks = 0;
 
   static const uint8_t MS = 8;
@@ -52,7 +52,7 @@ void Board::run() {
         return;
       }
       m68.getStates(states);
-      pullData = !m68.getBusy() && !data.empty();
+      pullData = m68.isInputReady() && !data.empty();
       if (pullData) {
         head = data.front();
         data.pop_front();
@@ -63,17 +63,17 @@ void Board::run() {
       } else if ((buttons & (1 << 3)) == 0) {
         m68.resetCpu();
       }
+      if (pullData) {
+        m68.pushData(head);
+      }
+      ticks += MS * 4000;
+      elapsedMs += MS / 2;
+      m68.runToTime(ticks);
     }
-
-    if (pullData) {
-      m68.pushData(head);
-    }
-    ticks += MS * 4000;
-    t += MS / 2;
-    m68.runToTime(ticks);
-    std::this_thread::sleep_until(start + std::chrono::milliseconds(t));
+    std::this_thread::sleep_until(start +
+                                  std::chrono::milliseconds(elapsedMs));
     // auto
     // elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now()-start).count();
-    // std::cout<<"t"<<t<<" actual "<< elapsed<<std::endl;
+    // std::cout<<"t"<<elapsedMs<<" actual "<< elapsed<<std::endl;
   }
 }

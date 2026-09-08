@@ -38,7 +38,7 @@ public:
 
   uint8_t read(uint16_t addr);
   void write(uint16_t addr, uint8_t val);
-  bool getBusy();
+  bool isInputReady() const;
   uint64_t step();
   void setConfig(uint8_t porta, uint8_t portc);
 
@@ -56,9 +56,13 @@ private:
   uint64_t time;
   uint8_t buttons;
   bool busy;
+  bool inputInitialized;
+  bool inputLatchFull;
+  uint16_t inputHandlerAddress;
   uint8_t porta, portc;
   bool getReed();
   void pushState();
+  void recordInputInitialization();
 };
 
 #endif

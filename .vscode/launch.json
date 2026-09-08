@@ -29,6 +29,21 @@
       "environment": [],
       "console": "integratedTerminal",
       "preLaunchTask": "Windows: Build Debug"
+    },
+    {
+      "name": "SP400 emulator from TCP (MSVC Debug)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}\\build\\windows\\Debug\\sp400.exe",
+      "args": [
+        "--tcp",
+        "${input:tcpPort}"
+      ],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "Windows: Build Debug"
     }
   ],
   "inputs": [
@@ -43,6 +58,12 @@
       "type": "promptString",
       "description": "Path to an SP400 command file",
       "default": "commands.txt"
+    },
+    {
+      "id": "tcpPort",
+      "type": "promptString",
+      "description": "Local TCP port for native SP400 input",
+      "default": "4040"
     }
   ]
 }

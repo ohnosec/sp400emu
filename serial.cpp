@@ -18,8 +18,8 @@
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 #endif
 
-Serial::Serial(Board &board_, const std::string &dev_)
-    : board(board_), dev(dev_)
+Serial::Serial(InputTarget &target_, const std::string &dev_)
+    : target(target_), dev(dev_)
 #ifdef _WIN32
       , fd(INVALID_HANDLE_VALUE), rtsEnabled(false)
 #else
@@ -124,9 +124,9 @@ void Serial::run() {
       break;
     }
 
-    setRts(board.isBusy());
+    setRts(target.isReady());
     if (bytesRead > 0) {
-      board.pushData(reinterpret_cast<const uint8_t *>(buffer), bytesRead);
+      target.pushData(reinterpret_cast<const uint8_t *>(buffer), bytesRead);
     }
   }
 
@@ -206,10 +206,10 @@ void Serial::run() {
   while (running.load()) { /* loop for input */
     // std::cout<<"starting read"<<std::endl;
     int res = read(fd, buf, 255);
-    setRts(board.isBusy());
+    setRts(target.isReady());
     if (res > 0) {
       // std::cout<<"received"<<res<<" bytes"<<std::endl;
-      board.pushData(reinterpret_cast<const uint8_t *>(buf), res);
+      target.pushData(reinterpret_cast<const uint8_t *>(buf), res);
     } else {
       // std::cout<<"no data"<<std::endl;
     }
