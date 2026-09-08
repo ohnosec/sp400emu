@@ -89,6 +89,8 @@ void drawFilledCircle(SDL_Renderer *renderer, int centerX, int centerY,
 
 namespace {
 constexpr int BUTTON_TEXT_SCALE = 2;
+constexpr int32_t WHEEL_SCROLL_PIXELS = 60;
+constexpr int32_t PAGE_SCROLL_OVERLAP = 40;
 
 bool containsPoint(const SDL_Rect &rect, int x, int y) {
   return x >= rect.x && x < rect.x + rect.w && y >= rect.y &&
@@ -279,8 +281,8 @@ Plotter::Plotter(Board &board_, int32_t w, int32_t h)
       colorSelectButton{pageOff.x + page_width + 8, 92,
                         canvas_width - (pageOff.x + page_width + 16), 52},
       win(canvas_width, canvas_height), paper(page_width, page_height),
-      frontPanel(), lineFeedKeyDown(false), lineFeedMouseDown(false),
-      board(board_) {}
+      frontPanel(), viewport(), plotterBusy(false), lineFeedKeyDown(false),
+      lineFeedMouseDown(false), board(board_) {}
 
 void Plotter::makePage() {
   paper.resizeHeight(paper.getHeight() + page_height);
@@ -303,6 +305,10 @@ void Plotter::pulseColorSelect() {
   board.setButtons(frontPanel.buttons());
 }
 
+void Plotter::scrollPaper(int32_t delta) {
+  viewport.scrollBy(delta, paper.getHeight(), canvas_height, plotterBusy);
+}
+
 void Plotter::releaseControls() {
   SDL_CaptureMouse(SDL_FALSE);
   lineFeedKeyDown = false;
@@ -323,6 +329,14 @@ void Plotter::handleEvent(const SDL_Event &event, bool &quit) {
     }
     break;
   case SDL_KEYDOWN:
+    if (event.key.keysym.sym == SDLK_UP) {
+      scrollPaper(-WHEEL_SCROLL_PIXELS);
+      break;
+    }
+    if (event.key.keysym.sym == SDLK_DOWN) {
+      scrollPaper(WHEEL_SCROLL_PIXELS);
+      break;
+    }
     if (event.key.repeat != 0) {
       break;
     }
@@ -331,6 +345,10 @@ void Plotter::handleEvent(const SDL_Event &event, bool &quit) {
       updateLineFeed();
     } else if (event.key.keysym.sym == SDLK_c) {
       pulseColorSelect();
+    } else if (event.key.keysym.sym == SDLK_PAGEUP) {
+      scrollPaper(-(canvas_height - PAGE_SCROLL_OVERLAP));
+    } else if (event.key.keysym.sym == SDLK_PAGEDOWN) {
+      scrollPaper(canvas_height - PAGE_SCROLL_OVERLAP);
     }
     break;
   case SDL_KEYUP:
@@ -359,6 +377,14 @@ void Plotter::handleEvent(const SDL_Event &event, bool &quit) {
       updateLineFeed();
     }
     break;
+  case SDL_MOUSEWHEEL: {
+    int32_t steps = std::clamp(event.wheel.y, -10, 10);
+    if (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+      steps = -steps;
+    }
+    scrollPaper(-steps * WHEEL_SCROLL_PIXELS);
+    break;
+  }
   default:
     break;
   }
@@ -383,10 +409,12 @@ void Plotter::run() {
       board.setButtons(frontPanel.buttons());
     }
     auto states = board.getStates();
+    const bool plotterStateChanged = !states.empty();
     for (auto &s : states) {
       head.x = motOff.x + s.x;
       head.y = motOff.y + s.y;
       c = penColors + s.colorIdx;
+      plotterBusy = s.busy;
       if (s.penDown) {
         if (head.y >= 0) {
           ensurePaperHeight(head.y + 1);
@@ -395,16 +423,21 @@ void Plotter::run() {
       }
     }
 
+    if (plotterStateChanged) {
+      const int32_t followedTop = std::max(0, head.y - pageOff.y);
+      ensurePaperHeight(followedTop + canvas_height);
+      viewport.followHead(head.y, pageOff.y, paper.getHeight(), canvas_height);
+    }
+
     win.clear();
-    const int32_t viewportTop = std::max(0, head.y - pageOff.y);
-    ensurePaperHeight(viewportTop + canvas_height);
-    SDL_Rect srcRect = {0, viewportTop, page_width,
+    SDL_Rect srcRect = {0, viewport.top(), page_width,
                         canvas_height}; // Full texture area
     SDL_Rect destRect = {pageOff.x, 0, page_width,
                          canvas_height}; // Half window area
     paper.drawTo(win.renderer, srcRect, destRect);
     SDL_SetRenderDrawColor(win.renderer, c->r, c->g, c->b, 255);
-    drawFilledCircle(win.renderer, head.x + pageOff.x, head.y - viewportTop, 6);
+    drawFilledCircle(win.renderer, head.x + pageOff.x, head.y - viewport.top(),
+                     6);
     drawControls();
     SDL_RenderPresent(win.renderer);
   }

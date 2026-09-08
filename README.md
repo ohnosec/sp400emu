@@ -93,6 +93,17 @@ input:
 The emulator releases both inputs if its window loses focus or closes, so a
 manual control cannot remain stuck when switching applications.
 
+## Paper navigation
+
+When the plotter is idle, use the mouse wheel or the Up and Down arrow keys to
+move through the stored paper in small steps. Page Up and Page Down move by
+nearly a full page. This changes only the displayed viewport; it does not move
+the emulated print head or send an input command.
+
+Manual scrolling is ignored while the firmware reports that it is busy. When
+plotting resumes, the viewport automatically returns to the current print-head
+position.
+
 ## Linux
 
 Install the SDL2 development package for your distribution, initialize the

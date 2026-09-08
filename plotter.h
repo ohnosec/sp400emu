@@ -2,6 +2,7 @@
 #define _SP400_PLOTTER_H
 #include "board.h"
 #include "front_panel.h"
+#include "paper_viewport.h"
 #ifdef _WIN32
 #include <SDL.h>
 #else
@@ -73,6 +74,8 @@ private:
   Window win;
   Surface paper;
   FrontPanelState frontPanel;
+  PaperViewport viewport;
+  bool plotterBusy;
   bool lineFeedKeyDown;
   bool lineFeedMouseDown;
   void makePage();
@@ -80,6 +83,7 @@ private:
   void handleEvent(const SDL_Event &event, bool &quit);
   void updateLineFeed();
   void pulseColorSelect();
+  void scrollPaper(int32_t delta);
   void releaseControls();
   void drawControls();
   Board &board;

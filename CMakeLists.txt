@@ -145,4 +145,14 @@ if(BUILD_TESTING)
     target_compile_options(front_panel_test PRIVATE /W4)
   endif()
   add_test(NAME front_panel COMMAND front_panel_test)
+
+  add_executable(paper_viewport_test tests/paper_viewport_test.cpp)
+  target_compile_features(paper_viewport_test PRIVATE cxx_std_17)
+  target_include_directories(paper_viewport_test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  )
+  if(MSVC)
+    target_compile_options(paper_viewport_test PRIVATE /W4)
+  endif()
+  add_test(NAME paper_viewport COMMAND paper_viewport_test)
 endif()
