@@ -1,6 +1,7 @@
 #ifndef _SP400_PLOTTER_H
 #define _SP400_PLOTTER_H
 #include "board.h"
+#include "front_panel.h"
 #ifdef _WIN32
 #include <SDL.h>
 #else
@@ -67,10 +68,20 @@ private:
   Point motOff;
   Point pageOff;
   Point head;
+  SDL_Rect lineFeedButton;
+  SDL_Rect colorSelectButton;
   Window win;
   Surface paper;
+  FrontPanelState frontPanel;
+  bool lineFeedKeyDown;
+  bool lineFeedMouseDown;
   void makePage();
   void ensurePaperHeight(int32_t requiredHeight);
+  void handleEvent(const SDL_Event &event, bool &quit);
+  void updateLineFeed();
+  void pulseColorSelect();
+  void releaseControls();
+  void drawControls();
   Board &board;
 };
 

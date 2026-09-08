@@ -81,6 +81,18 @@ its accept loop, allowing another bridge run to connect without restarting the
 emulator. TCP mode does not send the emulated BUSY state back, so it verifies
 translation and emulated plotting, not the Pico UART/BUSY transport behavior.
 
+## Manual controls
+
+The controls beside the emulated paper drive the original firmware's
+active-low front-panel inputs and do not add bytes to serial, file, or TCP
+input:
+
+- Hold **FEED**, or hold the `F` key, to assert Line Feed on PA3.
+- Click **COLOR**, or press the `C` key, to pulse Color Select on PA2.
+
+The emulator releases both inputs if its window loses focus or closes, so a
+manual control cannot remain stuck when switching applications.
+
 ## Linux
 
 Install the SDL2 development package for your distribution, initialize the

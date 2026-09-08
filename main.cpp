@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
       input = std::make_unique<Serial>(board, argv[1]);
     }
 
-    Plotter plotter(board, 640, 480);
+    Plotter plotter(board, 760, 480);
     plotter.run();
   } catch (const std::exception &error) {
     std::cerr << "Error: " << error.what() << std::endl;

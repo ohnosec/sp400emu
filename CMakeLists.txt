@@ -135,4 +135,14 @@ if(BUILD_TESTING)
     target_link_libraries(tcp_input_test PRIVATE ws2_32)
   endif()
   add_test(NAME tcp_input COMMAND tcp_input_test)
+
+  add_executable(front_panel_test tests/front_panel_test.cpp)
+  target_compile_features(front_panel_test PRIVATE cxx_std_17)
+  target_include_directories(front_panel_test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  )
+  if(MSVC)
+    target_compile_options(front_panel_test PRIVATE /W4)
+  endif()
+  add_test(NAME front_panel COMMAND front_panel_test)
 endif()

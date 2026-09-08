@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdexcept>
 #include <stdlib.h>
+#include <string>
 
 std::ostream &operator<<(std::ostream &o, const SDL_Rect &r) {
   return o << r.x << " " << r.y << " " << r.w << " " << r.h;
@@ -85,6 +86,96 @@ void drawFilledCircle(SDL_Renderer *renderer, int centerX, int centerY,
     }
   }
 }
+
+namespace {
+constexpr int BUTTON_TEXT_SCALE = 2;
+
+bool containsPoint(const SDL_Rect &rect, int x, int y) {
+  return x >= rect.x && x < rect.x + rect.w && y >= rect.y &&
+         y < rect.y + rect.h;
+}
+
+const uint8_t *glyph(char character) {
+  static const uint8_t d[] = {0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E};
+  static const uint8_t e[] = {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F};
+  static const uint8_t f[] = {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10};
+  static const uint8_t n[] = {0x11, 0x19, 0x19, 0x15, 0x13, 0x13, 0x11};
+  static const uint8_t c[] = {0x0F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0F};
+  static const uint8_t l[] = {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F};
+  static const uint8_t o[] = {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E};
+  static const uint8_t r[] = {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11};
+  static const uint8_t u[] = {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E};
+  static const uint8_t blank[] = {0, 0, 0, 0, 0, 0, 0};
+
+  switch (character) {
+  case 'C':
+    return c;
+  case 'D':
+    return d;
+  case 'E':
+    return e;
+  case 'F':
+    return f;
+  case 'L':
+    return l;
+  case 'N':
+    return n;
+  case 'O':
+    return o;
+  case 'R':
+    return r;
+  case 'U':
+    return u;
+  default:
+    return blank;
+  }
+}
+
+void drawLabel(SDL_Renderer *renderer, const SDL_Rect &button,
+               const std::string &label) {
+  constexpr int GLYPH_WIDTH = 5;
+  constexpr int GLYPH_HEIGHT = 7;
+  constexpr int GLYPH_SPACING = 1;
+  const int textWidth =
+      (static_cast<int>(label.size()) * (GLYPH_WIDTH + GLYPH_SPACING) -
+       GLYPH_SPACING) *
+      BUTTON_TEXT_SCALE;
+  const int startX = button.x + (button.w - textWidth) / 2;
+  const int startY =
+      button.y + (button.h - GLYPH_HEIGHT * BUTTON_TEXT_SCALE) / 2;
+
+  SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
+  for (size_t index = 0; index < label.size(); ++index) {
+    const uint8_t *rows = glyph(label[index]);
+    const int glyphX = startX +
+                       static_cast<int>(index) *
+                           (GLYPH_WIDTH + GLYPH_SPACING) * BUTTON_TEXT_SCALE;
+    for (int y = 0; y < GLYPH_HEIGHT; ++y) {
+      for (int x = 0; x < GLYPH_WIDTH; ++x) {
+        if ((rows[y] & (1U << (GLYPH_WIDTH - x - 1))) == 0) {
+          continue;
+        }
+        SDL_Rect pixel = {glyphX + x * BUTTON_TEXT_SCALE,
+                          startY + y * BUTTON_TEXT_SCALE, BUTTON_TEXT_SCALE,
+                          BUTTON_TEXT_SCALE};
+        SDL_RenderFillRect(renderer, &pixel);
+      }
+    }
+  }
+}
+
+void drawButton(SDL_Renderer *renderer, const SDL_Rect &button,
+                const std::string &label, bool pressed) {
+  const uint8_t shade = pressed ? 0x38 : 0x60;
+  SDL_SetRenderDrawColor(renderer, shade, shade, shade, 0xFF);
+  SDL_RenderFillRect(renderer, &button);
+  SDL_SetRenderDrawColor(renderer, pressed ? 0xFF : 0xC0,
+                         pressed ? 0xD0 : 0xC0,
+                         pressed ? 0x40 : 0xC0, 0xFF);
+  SDL_RenderDrawRect(renderer, &button);
+  drawLabel(renderer, button, label);
+}
+} // namespace
 
 Texture::Texture(SDL_Renderer *renderer_, int32_t w, int32_t h)
     : renderer(renderer_), width(w), height(h) {
@@ -183,7 +274,12 @@ Plotter::Plotter(Board &board_, int32_t w, int32_t h)
     : canvas_width(w), canvas_height(h), page_width(570), page_height(480),
       motOff(550, 240),
       pageOff((canvas_width - page_width) / 2, canvas_height / 2), head(0, 0),
+      lineFeedButton{pageOff.x + page_width + 8, 24,
+                     canvas_width - (pageOff.x + page_width + 16), 52},
+      colorSelectButton{pageOff.x + page_width + 8, 92,
+                        canvas_width - (pageOff.x + page_width + 16), 52},
       win(canvas_width, canvas_height), paper(page_width, page_height),
+      frontPanel(), lineFeedKeyDown(false), lineFeedMouseDown(false),
       board(board_) {}
 
 void Plotter::makePage() {
@@ -197,15 +293,94 @@ void Plotter::ensurePaperHeight(int32_t requiredHeight) {
   }
 }
 
+void Plotter::updateLineFeed() {
+  frontPanel.setLineFeedPressed(lineFeedKeyDown || lineFeedMouseDown);
+  board.setButtons(frontPanel.buttons());
+}
+
+void Plotter::pulseColorSelect() {
+  frontPanel.pulseColorSelect(SDL_GetTicks64());
+  board.setButtons(frontPanel.buttons());
+}
+
+void Plotter::releaseControls() {
+  SDL_CaptureMouse(SDL_FALSE);
+  lineFeedKeyDown = false;
+  lineFeedMouseDown = false;
+  frontPanel.releaseAll();
+  board.setButtons(frontPanel.buttons());
+}
+
+void Plotter::handleEvent(const SDL_Event &event, bool &quit) {
+  switch (event.type) {
+  case SDL_QUIT:
+    releaseControls();
+    quit = true;
+    break;
+  case SDL_WINDOWEVENT:
+    if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+      releaseControls();
+    }
+    break;
+  case SDL_KEYDOWN:
+    if (event.key.repeat != 0) {
+      break;
+    }
+    if (event.key.keysym.sym == SDLK_f) {
+      lineFeedKeyDown = true;
+      updateLineFeed();
+    } else if (event.key.keysym.sym == SDLK_c) {
+      pulseColorSelect();
+    }
+    break;
+  case SDL_KEYUP:
+    if (event.key.keysym.sym == SDLK_f) {
+      lineFeedKeyDown = false;
+      updateLineFeed();
+    }
+    break;
+  case SDL_MOUSEBUTTONDOWN:
+    if (event.button.button != SDL_BUTTON_LEFT) {
+      break;
+    }
+    if (containsPoint(lineFeedButton, event.button.x, event.button.y)) {
+      lineFeedMouseDown = true;
+      SDL_CaptureMouse(SDL_TRUE);
+      updateLineFeed();
+    } else if (containsPoint(colorSelectButton, event.button.x,
+                             event.button.y)) {
+      pulseColorSelect();
+    }
+    break;
+  case SDL_MOUSEBUTTONUP:
+    if (event.button.button == SDL_BUTTON_LEFT && lineFeedMouseDown) {
+      lineFeedMouseDown = false;
+      SDL_CaptureMouse(SDL_FALSE);
+      updateLineFeed();
+    }
+    break;
+  default:
+    break;
+  }
+}
+
+void Plotter::drawControls() {
+  drawButton(win.renderer, lineFeedButton, "FEED",
+             frontPanel.lineFeedPressed());
+  drawButton(win.renderer, colorSelectButton, "COLOR",
+             frontPanel.colorSelectPressed());
+}
+
 void Plotter::run() {
   bool quit = false;
   SDL_Event e;
   const Color *c = penColors;
   while (!quit) {
     while (SDL_PollEvent(&e) != 0) {
-      if (e.type == SDL_QUIT) {
-        quit = true;
-      }
+      handleEvent(e, quit);
+    }
+    if (frontPanel.update(SDL_GetTicks64())) {
+      board.setButtons(frontPanel.buttons());
     }
     auto states = board.getStates();
     for (auto &s : states) {
@@ -230,6 +405,8 @@ void Plotter::run() {
     paper.drawTo(win.renderer, srcRect, destRect);
     SDL_SetRenderDrawColor(win.renderer, c->r, c->g, c->b, 255);
     drawFilledCircle(win.renderer, head.x + pageOff.x, head.y - viewportTop, 6);
+    drawControls();
     SDL_RenderPresent(win.renderer);
   }
+  releaseControls();
 }

@@ -1,4 +1,5 @@
 #include "m68sys.h"
+#include "front_panel.h"
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -62,6 +63,21 @@ int main() {
             "firmware accepted input while boot interrupts were masked");
     runUntilInputReady(system, MAX_STARTUP_INSTRUCTIONS,
                        "firmware did not become ready after boot");
+
+    system.setButtons(static_cast<uint8_t>(
+        0xFF & ~FrontPanelState::LINE_FEED_MASK));
+    require((system.read(0) & (1U << 3)) == 0,
+            "line feed button did not map to active-low PA3");
+    require((system.read(0) & (1U << 2)) != 0,
+            "line feed button unexpectedly changed PA2");
+    system.setButtons(static_cast<uint8_t>(
+        0xFF & ~FrontPanelState::COLOR_SELECT_MASK));
+    require((system.read(0) & (1U << 2)) == 0,
+            "color select button did not map to active-low PA2");
+    require((system.read(0) & (1U << 3)) != 0,
+            "color select button unexpectedly changed PA3");
+    system.setButtons(0xFF);
+
     sendAndWait(system, 0x12);
     runInstructions(system, 1000);
     require((system.read(MODE_FLAGS_ADDRESS) & GRAPHICS_MODE_FLAG) != 0,
