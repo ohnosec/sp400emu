@@ -281,8 +281,20 @@ Plotter::Plotter(Board &board_, int32_t w, int32_t h)
       colorSelectButton{pageOff.x + page_width + 8, 92,
                         canvas_width - (pageOff.x + page_width + 16), 52},
       win(canvas_width, canvas_height), paper(page_width, page_height),
-      frontPanel(), viewport(), plotterBusy(false), lineFeedKeyDown(false),
-      lineFeedMouseDown(false), board(board_) {}
+      paperCursors(), frontPanel(), viewport(), plotterBusy(false),
+      paperDragging(false), lineFeedKeyDown(false), lineFeedMouseDown(false),
+      board(board_) {
+  if (!paperCursors.available()) {
+    std::cerr << "Warning: custom paper cursors are unavailable; using the "
+                 "default cursor."
+              << std::endl;
+  }
+  if (paperCursors.buttonPointer() == nullptr) {
+    std::cerr << "Warning: the system button pointer is unavailable; using "
+                 "the default cursor."
+              << std::endl;
+  }
+}
 
 void Plotter::makePage() {
   paper.resizeHeight(paper.getHeight() + page_height);
@@ -309,10 +321,53 @@ void Plotter::scrollPaper(int32_t delta) {
   viewport.scrollBy(delta, paper.getHeight(), canvas_height, plotterBusy);
 }
 
+void Plotter::dragPaper(int32_t pointerDeltaY) {
+  viewport.dragBy(pointerDeltaY, paper.getHeight(), canvas_height, plotterBusy);
+}
+
+void Plotter::updateMouseCapture() {
+  SDL_CaptureMouse(lineFeedMouseDown || paperDragging ? SDL_TRUE : SDL_FALSE);
+}
+
+void Plotter::updateCursor(int32_t mouseX, int32_t mouseY) {
+  const SDL_Rect paperRect = {pageOff.x, 0, page_width, canvas_height};
+  const bool overButton =
+      containsPoint(lineFeedButton, mouseX, mouseY) ||
+      containsPoint(colorSelectButton, mouseX, mouseY);
+  SDL_Cursor *cursor = SDL_GetDefaultCursor();
+  if (paperDragging && paperCursors.available()) {
+    cursor = paperCursors.closedHand();
+  } else if (overButton && paperCursors.buttonPointer() != nullptr) {
+    cursor = paperCursors.buttonPointer();
+  } else if (paperCursors.available() && !plotterBusy &&
+             !lineFeedMouseDown &&
+             containsPoint(paperRect, mouseX, mouseY)) {
+    cursor = paperCursors.openHand();
+  }
+  SDL_SetCursor(cursor);
+}
+
+void Plotter::refreshCursor() {
+  int mouseX = 0;
+  int mouseY = 0;
+  SDL_GetMouseState(&mouseX, &mouseY);
+  updateCursor(mouseX, mouseY);
+}
+
+void Plotter::stopPaperDrag() {
+  if (!paperDragging) {
+    return;
+  }
+  paperDragging = false;
+  updateMouseCapture();
+}
+
 void Plotter::releaseControls() {
-  SDL_CaptureMouse(SDL_FALSE);
+  paperDragging = false;
   lineFeedKeyDown = false;
   lineFeedMouseDown = false;
+  updateMouseCapture();
+  SDL_SetCursor(SDL_GetDefaultCursor());
   frontPanel.releaseAll();
   board.setButtons(frontPanel.buttons());
 }
@@ -363,19 +418,37 @@ void Plotter::handleEvent(const SDL_Event &event, bool &quit) {
     }
     if (containsPoint(lineFeedButton, event.button.x, event.button.y)) {
       lineFeedMouseDown = true;
-      SDL_CaptureMouse(SDL_TRUE);
+      updateMouseCapture();
       updateLineFeed();
     } else if (containsPoint(colorSelectButton, event.button.x,
                              event.button.y)) {
       pulseColorSelect();
+    } else {
+      const SDL_Rect paperRect = {pageOff.x, 0, page_width, canvas_height};
+      if (!plotterBusy &&
+          containsPoint(paperRect, event.button.x, event.button.y)) {
+        paperDragging = true;
+        updateMouseCapture();
+      }
     }
+    updateCursor(event.button.x, event.button.y);
     break;
   case SDL_MOUSEBUTTONUP:
-    if (event.button.button == SDL_BUTTON_LEFT && lineFeedMouseDown) {
-      lineFeedMouseDown = false;
-      SDL_CaptureMouse(SDL_FALSE);
-      updateLineFeed();
+    if (event.button.button == SDL_BUTTON_LEFT) {
+      if (lineFeedMouseDown) {
+        lineFeedMouseDown = false;
+        updateLineFeed();
+      }
+      paperDragging = false;
+      updateMouseCapture();
+      updateCursor(event.button.x, event.button.y);
     }
+    break;
+  case SDL_MOUSEMOTION:
+    if (paperDragging) {
+      dragPaper(event.motion.yrel);
+    }
+    updateCursor(event.motion.x, event.motion.y);
     break;
   case SDL_MOUSEWHEEL: {
     int32_t steps = std::clamp(event.wheel.y, -10, 10);
@@ -424,9 +497,11 @@ void Plotter::run() {
     }
 
     if (plotterStateChanged) {
+      stopPaperDrag();
       const int32_t followedTop = std::max(0, head.y - pageOff.y);
       ensurePaperHeight(followedTop + canvas_height);
       viewport.followHead(head.y, pageOff.y, paper.getHeight(), canvas_height);
+      refreshCursor();
     }
 
     win.clear();

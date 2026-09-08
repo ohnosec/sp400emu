@@ -7,6 +7,7 @@ find_package(Threads REQUIRED)
 
 set(M68_OPTABLE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(M68_OPTABLE "${M68_OPTABLE_DIR}/m68_optab_hc05.h")
+set(PAPER_CURSOR_ASSET_HEADER "${M68_OPTABLE_DIR}/paper_cursor_assets.h")
 add_custom_command(
   OUTPUT "${M68_OPTABLE}"
   COMMAND "${CMAKE_COMMAND}" -E make_directory "${M68_OPTABLE_DIR}"
@@ -22,11 +23,27 @@ add_custom_command(
   VERBATIM
 )
 
+add_custom_command(
+  OUTPUT "${PAPER_CURSOR_ASSET_HEADER}"
+  COMMAND "${CMAKE_COMMAND}" -E make_directory "${M68_OPTABLE_DIR}"
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_cursor_assets.py"
+          --open "${CMAKE_CURRENT_SOURCE_DIR}/assets/cursors/open_hand.bmp"
+          --closed "${CMAKE_CURRENT_SOURCE_DIR}/assets/cursors/closed_hand.bmp"
+          --output "${PAPER_CURSOR_ASSET_HEADER}"
+  DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_cursor_assets.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/cursors/open_hand.bmp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/cursors/closed_hand.bmp"
+  VERBATIM
+)
+
 add_executable(sp400
   board.cpp
   file_input.cpp
   m68sys.cpp
   main.cpp
+  paper_cursor.cpp
   plotter.cpp
   serial.cpp
   stepper.c
@@ -35,6 +52,7 @@ add_executable(sp400
   m68emu/m68_ops.c
   m68emu/m68tmr.c
   "${M68_OPTABLE}"
+  "${PAPER_CURSOR_ASSET_HEADER}"
 )
 
 target_compile_features(sp400 PRIVATE c_std_11 cxx_std_17)
@@ -155,4 +173,10 @@ if(BUILD_TESTING)
     target_compile_options(paper_viewport_test PRIVATE /W4)
   endif()
   add_test(NAME paper_viewport COMMAND paper_viewport_test)
+
+  add_test(
+    NAME cursor_assets
+    COMMAND "${Python3_EXECUTABLE}" -B
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/embed_cursor_assets_test.py"
+  )
 endif()

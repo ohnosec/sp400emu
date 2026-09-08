@@ -68,30 +68,22 @@ To start the emulator as a TCP server:
 ```
 
 The listener binds only to `127.0.0.1`, accepts one client at a time, and treats
-all input as an opaque stream of native SP-400 bytes. It does not expect HP-GL
-or EBB commands and does not treat individual TCP writes or packets as command
-boundaries. Received bytes are released to the emulated board in order, paced
-like a 4800-baud 8N1 serial link, and gated by the emulated ready signal. A
-client may connect and send immediately after the listener appears; the
-emulator buffers the stream until the ROM has completed startup and entered its
-input parser.
+all input as an opaque stream of native SP-400 bytes. It does not treat individual
+TCP writes or packets as command boundaries. Received bytes are released to the
+emulated board in order, paced like a 4800-baud 8N1 serial link, and gated by the
+emulated ready signal. A client may connect and send immediately after the listener
+appears; the emulator buffers the stream until the ROM has completed startup and
+entered its input parser.
 
 Disconnecting a client leaves the SDL window open and returns the listener to
-its accept loop, allowing another bridge run to connect without restarting the
-emulator. TCP mode does not send the emulated BUSY state back, so it verifies
-translation and emulated plotting, not the Pico UART/BUSY transport behavior.
+its accept loop. TCP mode does not send the emulated BUSY state back, so it
+verifies translation and emulated plotting, not the UART/BUSY transport
+behavior.
 
 ## Manual controls
 
-The controls beside the emulated paper drive the original firmware's
-active-low front-panel inputs and do not add bytes to serial, file, or TCP
-input:
-
-- Hold **FEED**, or hold the `F` key, to assert Line Feed on PA3.
-- Click **COLOR**, or press the `C` key, to pulse Color Select on PA2.
-
-The emulator releases both inputs if its window loses focus or closes, so a
-manual control cannot remain stuck when switching applications.
+- Hold **FEED**, or hold the `F` key
+- Click **COLOR**, or press the `C` key
 
 ## Paper navigation
 
@@ -99,6 +91,10 @@ When the plotter is idle, use the mouse wheel or the Up and Down arrow keys to
 move through the stored paper in small steps. Page Up and Page Down move by
 nearly a full page. This changes only the displayed viewport; it does not move
 the emulated print head or send an input command.
+
+The pointer changes to an open hand over the paper while navigation is
+available, then to a closed hand while dragging. Hold the left mouse button and
+drag the paper directly to move through it.
 
 Manual scrolling is ignored while the firmware reports that it is busy. When
 plotting resumes, the viewport automatically returns to the current print-head

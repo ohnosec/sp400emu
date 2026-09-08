@@ -18,6 +18,16 @@ public:
                   viewportHeight);
   }
 
+  bool dragBy(int32_t pointerDeltaY, int32_t paperHeight,
+              int32_t viewportHeight, bool plotting) {
+    if (plotting) {
+      return false;
+    }
+
+    return setTop(static_cast<int64_t>(viewportTop) - pointerDeltaY,
+                  paperHeight, viewportHeight);
+  }
+
   void followHead(int32_t headY, int32_t headScreenY, int32_t paperHeight,
                   int32_t viewportHeight) {
     setTop(static_cast<int64_t>(headY) - headScreenY, paperHeight,

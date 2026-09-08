@@ -36,6 +36,18 @@ int main() {
     viewport.followHead(700, 240, 960, 480);
     require(viewport.top() == 460, "viewport did not center on the head");
 
+    require(viewport.dragBy(100, 960, 480, false),
+            "idle downward paper drag was ignored");
+    require(viewport.top() == 360,
+            "dragging paper down did not reveal earlier content");
+    require(viewport.dragBy(-80, 960, 480, false),
+            "idle upward paper drag was ignored");
+    require(viewport.top() == 440,
+            "dragging paper up did not reveal later content");
+    require(!viewport.dragBy(40, 960, 480, true),
+            "busy plotter accepted paper dragging");
+    require(viewport.top() == 440, "busy drag changed the viewport");
+
     viewport.followHead(-10, 240, 960, 480);
     require(viewport.top() == 0,
             "negative head position moved above the paper top");

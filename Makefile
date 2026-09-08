@@ -1,6 +1,9 @@
 BUILD_DIR=./build
-CXXFLAGS=-Wall -pthread -I.
-CPP_SOURCES= serial.cpp file_input.cpp tcp_input.cpp m68sys.cpp plotter.cpp main.cpp board.cpp
+PYTHON?=python3
+GENERATED_DIR=$(BUILD_DIR)/generated
+CURSOR_ASSET_HEADER=$(GENERATED_DIR)/paper_cursor_assets.h
+CXXFLAGS=-Wall -pthread -I. -I$(GENERATED_DIR)
+CPP_SOURCES= serial.cpp file_input.cpp tcp_input.cpp m68sys.cpp plotter.cpp paper_cursor.cpp main.cpp board.cpp
 C_SOURCES= stepper.c m68emu/m68emu.c m68emu/m68_ops.c m68emu/m68tmr.c
 
 
@@ -28,6 +31,12 @@ $(BUILD_DIR)/%.o : %.cpp
 $(BUILD_DIR)/%.o : %.c
 	mkdir -p $(@D)
 	gcc $(CXXFLAGS) -c $< -o $@ -MMD -MP
+
+$(BUILD_DIR)/paper_cursor.o: $(CURSOR_ASSET_HEADER)
+
+$(CURSOR_ASSET_HEADER): scripts/embed_cursor_assets.py assets/cursors/open_hand.bmp assets/cursors/closed_hand.bmp
+	mkdir -p $(@D)
+	$(PYTHON) scripts/embed_cursor_assets.py --open assets/cursors/open_hand.bmp --closed assets/cursors/closed_hand.bmp --output $@
 
 
 $(BUILD_DIR):
