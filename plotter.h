@@ -32,7 +32,7 @@ public:
   void draw(const Point &p, const Color &c);
   SDL_Texture *get() { return pointsTexture; }
   void resizeHeight(int32_t h);
-  int32_t getHeight() { return height; }
+  int32_t getHeight() const { return height; }
 
 private:
   SDL_Texture *pointsTexture;
@@ -47,7 +47,7 @@ public:
 
   void draw(const Point &p, const Color &c);
   void resizeHeight(int32_t h);
-  int32_t getHeight() { return height; }
+  int32_t getHeight() const { return height; }
   void drawTo(SDL_Renderer *renderer, const SDL_Rect &src, const SDL_Rect &dst);
 
 private:
@@ -70,6 +70,7 @@ private:
   Window win;
   Surface paper;
   void makePage();
+  void ensurePaperHeight(int32_t requiredHeight);
   Board &board;
 };
 

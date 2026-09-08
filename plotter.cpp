@@ -15,12 +15,23 @@ Surface::Surface(int32_t w, int32_t h)
     : buffer(w * h, 0xFFFFFF), width(w), height(h) {}
 
 void Surface::draw(const Point &p, const Color &c) {
-  buffer[p.y * width + p.x] =
+  if (p.x < 0 || p.x >= width || p.y < 0 || p.y >= height) {
+    return;
+  }
+
+  const size_t index = static_cast<size_t>(p.y) * static_cast<size_t>(width) +
+                       static_cast<size_t>(p.x);
+  buffer[index] =
       ((uint32_t)c.r << 16) | (((uint32_t)c.g) << 8) | (((uint32_t)c.b) << 0);
 }
 
 void Surface::resizeHeight(int32_t newHeight) {
-  buffer.resize(width * newHeight, 0xFFFFFF);
+  if (newHeight <= height) {
+    return;
+  }
+
+  buffer.resize(static_cast<size_t>(width) * static_cast<size_t>(newHeight),
+                0xFFFFFF);
   height = newHeight;
 }
 
@@ -179,6 +190,13 @@ void Plotter::makePage() {
   paper.resizeHeight(paper.getHeight() + page_height);
 }
 
+void Plotter::ensurePaperHeight(int32_t requiredHeight) {
+  while (requiredHeight > paper.getHeight()) {
+    makePage();
+    std::cout << "made page of size " << paper.getHeight() << std::endl;
+  }
+}
+
 void Plotter::run() {
   bool quit = false;
   SDL_Event e;
@@ -195,22 +213,23 @@ void Plotter::run() {
       head.y = motOff.y + s.y;
       c = penColors + s.colorIdx;
       if (s.penDown) {
+        if (head.y >= 0) {
+          ensurePaperHeight(head.y + 1);
+        }
         paper.draw(head, *c);
       }
     }
 
     win.clear();
-    while (head.y + page_height > paper.getHeight()) {
-      makePage();
-      std::cout << "made page of size " << paper.getHeight() << std::endl;
-    }
-    SDL_Rect srcRect = {0, std::max(0, head.y - pageOff.y), page_width,
+    const int32_t viewportTop = std::max(0, head.y - pageOff.y);
+    ensurePaperHeight(viewportTop + canvas_height);
+    SDL_Rect srcRect = {0, viewportTop, page_width,
                         canvas_height}; // Full texture area
     SDL_Rect destRect = {pageOff.x, 0, page_width,
                          canvas_height}; // Half window area
     paper.drawTo(win.renderer, srcRect, destRect);
     SDL_SetRenderDrawColor(win.renderer, c->r, c->g, c->b, 255);
-    drawFilledCircle(win.renderer, head.x + pageOff.x, pageOff.y, 6);
+    drawFilledCircle(win.renderer, head.x + pageOff.x, head.y - viewportTop, 6);
     SDL_RenderPresent(win.renderer);
   }
 }
