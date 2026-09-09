@@ -1,0 +1,234 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  windows:
+    name: Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Build and test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # MSBuild can race when two targets generate the shared opcode header.
+          & .\scripts\build-windows.ps1 -Configuration Release -ParallelJobs 1
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
+
+          ctest --test-dir build\windows -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $packageName = 'sp400emu_windows64'
+          $packageDir = Join-Path $PWD "dist\$packageName"
+          New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+
+          Copy-Item build\windows\Release\sp400.exe $packageDir
+          Copy-Item build\windows\Release\SDL2.dll $packageDir
+          Copy-Item sp400_6805.bin $packageDir
+
+          $archive = Join-Path $PWD "dist\$packageName.zip"
+          Compress-Archive -Path "$packageDir\*" -DestinationPath $archive -CompressionLevel Optimal
+          if (-not (Test-Path -LiteralPath $archive)) { throw 'Windows archive was not created' }
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/sp400emu_windows64.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 7
+
+  linux:
+    name: Linux x64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes build-essential cmake python3 pkg-config libsdl2-dev
+
+      - name: Build and test
+        run: |
+          set -euo pipefail
+          cmake -S . -B build/release-linux -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/release-linux --parallel 1
+          ctest --test-dir build/release-linux --output-on-failure
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          package_name=sp400emu_linux64
+          package_dir="dist/$package_name"
+          mkdir -p "$package_dir"
+          install -m 0755 build/release-linux/sp400 "$package_dir/sp400"
+          install -m 0644 sp400_6805.bin "$package_dir/sp400_6805.bin"
+          tar -czf "dist/$package_name.tar.gz" -C "$package_dir" sp400 sp400_6805.bin
+          test -s "dist/$package_name.tar.gz"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/sp400emu_linux64.tar.gz
+          archive: false
+          if-no-files-found: error
+          retention-days: 7
+
+  raspberry-pi:
+    name: Raspberry Pi ${{ matrix.bits }}-bit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - bits: 32
+            package: sp400emu_raspberrypi32
+            base_image: raspios_lite:latest
+            cpu: cortex-a7
+            uname: armv7l
+          - bits: 64
+            package: sp400emu_raspberrypi64
+            base_image: raspios_lite_arm64:latest
+            cpu: cortex-a53
+            uname: aarch64
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Prepare artifact directory
+        run: mkdir -p dist
+
+      - name: Build and test in Raspberry Pi OS
+        uses: pguyot/arm-runner-action@v2
+        with:
+          base_image: ${{ matrix.base_image }}
+          cpu: ${{ matrix.cpu }}
+          copy_artifact_path: dist/${{ matrix.package }}.tar.gz
+          copy_artifact_dest: dist
+          image_additional_mb: 768
+          optimize_image: "no"
+          commands: |
+            set -eu
+            apt-get update
+            apt-get install --yes build-essential cmake python3 pkg-config libsdl2-dev
+
+            cmake -S . -B "build/${{ matrix.package }}" -DCMAKE_BUILD_TYPE=Release
+            cmake --build "build/${{ matrix.package }}" --parallel 1
+            ctest --test-dir "build/${{ matrix.package }}" --output-on-failure
+
+            package_dir="dist/${{ matrix.package }}"
+            mkdir -p "$package_dir"
+            install -m 0755 "build/${{ matrix.package }}/sp400" "$package_dir/sp400"
+            install -m 0644 sp400_6805.bin "$package_dir/sp400_6805.bin"
+            test "$(uname -m)" = "${{ matrix.uname }}"
+            tar -czf "dist/${{ matrix.package }}.tar.gz" \
+              -C "$package_dir" sp400 sp400_6805.bin
+            test -s "dist/${{ matrix.package }}.tar.gz"
+
+      - name: Verify guest package
+        run: |
+          set -euo pipefail
+          archive="dist/${{ matrix.package }}.tar.gz"
+          test -s "$archive"
+          mapfile -t entries < <(tar -tzf "$archive" | LC_ALL=C sort)
+          expected=(sp400 sp400_6805.bin)
+          test "${entries[*]}" = "${expected[*]}"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/${{ matrix.package }}.tar.gz
+          archive: false
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish GitHub release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - windows
+      - linux
+      - raspberry-pi
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "sp400emu_*.*"
+          path: release-assets
+          merge-multiple: true
+          skip-decompress: true
+
+      - name: Validate release assets
+        run: |
+          set -euo pipefail
+          cd release-assets
+
+          mapfile -t actual < <(find . -maxdepth 1 -type f \( -name '*.zip' -o -name '*.tar.gz' \) -printf '%f\n' | sort)
+          expected=(
+            sp400emu_linux64.tar.gz
+            sp400emu_raspberrypi32.tar.gz
+            sp400emu_raspberrypi64.tar.gz
+            sp400emu_windows64.zip
+          )
+          test "${actual[*]}" = "${expected[*]}"
+
+          mapfile -t windows_entries < <(unzip -Z1 sp400emu_windows64.zip | LC_ALL=C sort)
+          expected_windows=(SDL2.dll sp400.exe sp400_6805.bin)
+          test "${windows_entries[*]}" = "${expected_windows[*]}"
+
+          expected_tar=(sp400 sp400_6805.bin)
+          for archive in sp400emu_*.tar.gz; do
+            mapfile -t tar_entries < <(tar -tzf "$archive" | LC_ALL=C sort)
+            test "${tar_entries[*]}" = "${expected_tar[*]}"
+          done
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          assets=(release-assets/sp400emu_*)
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+              --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+          fi

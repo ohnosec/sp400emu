@@ -1,7 +1,10 @@
 [CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]
-    [string]$Configuration = 'Debug'
+    [string]$Configuration = 'Debug',
+
+    [ValidateRange(0, 256)]
+    [int]$ParallelJobs = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,7 +50,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "CMake configure failed with exit code $LASTEXITCODE."
 }
 
-& $cmakePath --build $buildPath --config $Configuration --parallel
+$buildArguments = @('--build', $buildPath, '--config', $Configuration, '--parallel')
+if ($ParallelJobs -gt 0) {
+    $buildArguments += $ParallelJobs
+}
+
+& $cmakePath @buildArguments
 if ($LASTEXITCODE -ne 0) {
     throw "MSVC build failed with exit code $LASTEXITCODE."
 }
